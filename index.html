@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vancomycin Calculator - 萬古黴素藥動學計算器</title>
+    <meta name="description" content="Advanced vancomycin pharmacokinetics calculator utilizing Bayesian modeling, Cockcroft-Gault, and Sawchuk-Zaske methods. Calculate initial empiric doses or adjust based on serum levels.">
+    <link rel="stylesheet" href="style.css">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for concentration-time curves -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="light-theme">
+    <!-- Header Section (Full Width Background) -->
+    <div class="header-section">
+        <div class="header-container">
+            <!-- Theme Toggle Button -->
+            <div class="theme-toggle-container">
+                <button class="theme-toggle-btn" id="btnThemeToggle" onclick="toggleTheme()" title="Switch Light/Dark Mode">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+            </div>
+            
+            <header>
+                <h1>Vancomycin Calculator</h1>
+                <p>萬古黴素藥動學計算器，支援 Bayesian 模型、AUC 監測及個人化劑量建議</p>
+            </header>
+
+            <!-- Feature Pills Row -->
+            <div class="features-container">
+                <span class="feature-pill"><i class="fa-solid fa-laptop-code" style="color: #64748b;"></i> Bayesian Modeling</span>
+                <span class="feature-pill"><i class="fa-solid fa-chart-column" style="color: #10b981;"></i> AUC 400-600</span>
+                <span class="feature-pill"><i class="fa-solid fa-pen-nib" style="color: #ef4444;"></i> 個人化劑量</span>
+                <span class="feature-pill"><i class="fa-solid fa-chart-line" style="color: #3b82f6;"></i> PK 曲線圖</span>
+                <span class="feature-pill"><i class="fa-solid fa-mobile-screen-button" style="color: #8b5cf6;"></i> Sawchuk-Zaske</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Section (Slate Background) -->
+    <div class="main-content">
+        <div class="container">
+            <!-- Mode Segment Control -->
+            <div style="display: flex; justify-content: center; margin-bottom: 2rem;">
+                <div class="segmented-control" style="max-width: 450px;">
+                    <button class="segment-btn active" id="btnModeEmpiric" onclick="setDosingMode('Empiric')">估算估計 Empiric Dosing</button>
+                    <button class="segment-btn" id="btnModeAdjusted" onclick="setDosingMode('Adjusted')">濃度調整 Level-Adjusted</button>
+                </div>
+            </div>
+
+            <div class="layout-grid">
+                <!-- LEFT COLUMN: INPUTS (Patient parameters & drug levels) -->
+                <main class="inputs-column">
+                    <!-- Patient Parameters Card -->
+                    <div class="panel">
+                        <div class="card-header">
+                            <div class="card-icon card-icon-patient"><i class="fa-solid fa-user"></i></div>
+                            <div>
+                                <div class="card-title">病人資料 Patient Parameters</div>
+                                <div class="card-subtitle">基本身體指標</div>
+                            </div>
+                        </div>
+
+                        <div class="form-group-row">
+                            <div class="form-group">
+                                <label for="txtAge">年齡 Age <span class="required">*</span> (years)</label>
+                                <div class="input-with-units">
+                                    <input type="number" id="txtAge" placeholder="e.g. 55" value="55" min="1" max="120">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>性別 Sex <span class="required">*</span></label>
+                                <div class="toggle-btn-group">
+                                    <button class="toggle-btn active" id="btnSexMale" onclick="setSex('Male')" style="font-size: 1.15rem; width: 44px; height: 38px;">♂</button>
+                                    <button class="toggle-btn" id="btnSexFemale" onclick="setSex('Female')" style="font-size: 1.15rem; width: 44px; height: 38px;">♀</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group-row">
+                            <div class="form-group">
+                                <label for="txtWeight">體重 Weight <span class="required">*</span> (kg)</label>
+                                <div class="input-with-units">
+                                    <input type="number" id="txtWeight" placeholder="e.g. 70" value="70" min="10" max="300" step="0.1">
+                                    <div class="unit-toggle">
+                                        <button class="unit-btn active" id="lblWeightUnit">kg</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="txtHeight">身高 Height <span class="required">*</span> (cm)</label>
+                                <div class="input-with-units">
+                                    <input type="number" id="txtHeight" placeholder="e.g. 170" value="170" min="50" max="250" step="0.1">
+                                    <div class="unit-toggle">
+                                        <button class="unit-btn active" id="lblHeightUnit">cm</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Serum Creatinine with manual toggle -->
+                        <div class="form-group" id="groupSCrInput">
+                            <label for="txtCreatinine">
+                                <span>血清肌酸酐 Serum Creatinine <span class="required">*</span> (mg/dL)</span>
+                                <span class="toggle-link" onclick="setManualCrCl(true)">手動輸入 CrCl</span>
+                            </label>
+                            <div class="input-with-units">
+                                <input type="number" id="txtCreatinine" placeholder="e.g. 0.9" value="0.9" min="0.1" max="15" step="0.01">
+                                <div class="unit-toggle">
+                                    <button class="unit-btn active" id="lblCreatinineUnit">mg/dL</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Manual CrCl Input (hidden by default) -->
+                        <div class="form-group" id="groupManualCrCl" style="display: none;">
+                            <label for="txtCrCl">
+                                <span>量測肌酸酐清除率 Measured CrCl <span class="required">*</span> (mL/min)</span>
+                                <span class="toggle-link" onclick="setManualCrCl(false)">計算 CrCl</span>
+                            </label>
+                            <div class="input-with-units">
+                                <input type="number" id="txtCrCl" placeholder="e.g. 80" value="80" min="1" max="250" step="1">
+                                <div class="unit-toggle"><span class="unit-btn active">mL/min</span></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>臨床狀態 Clinical Status</label>
+                            <div class="toggle-btn-group">
+                                <button class="toggle-btn active" id="btnCritNo" onclick="setCriticallyIll(false)">一般</button>
+                                <button class="toggle-btn" id="btnCritYes" onclick="setCriticallyIll(true)">重症 ICU</button>
+                            </div>
+                        </div>
+
+                    <!-- Dialysis Selection -->
+                    <div class="form-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        <label for="drpRenalReplacement">腎功能替代療法 (洗腎)</label>
+                        <select id="drpRenalReplacement" onchange="toggleRenalReplacement()">
+                            <option value="None">未進行透析 (無腎功能替代療法)</option>
+                            <option value="RRT">透析患者 (血液透析 HD / CRRT / SLED)</option>
+                        </select>
+                    </div>
+
+                    <div id="divDialysisWarning" class="danger-box" style="display: none; margin-top: 0.75rem; margin-bottom: 0;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> <strong>注意：</strong>本計算器非針對透析患者設計。透析患者藥物清除動力學高度不穩定，請參照專門指引進行估算。
+                    </div>
+                </div>
+
+                <!-- Drug Levels Card (displayed when Level-Adjusted Mode is active) -->
+                <div class="panel" id="cardDrugLevels" style="display: none;">
+                    <div class="card-header">
+                        <div class="card-icon" style="background-color: #fef3c7; color: #d97706;"><i class="fa-solid fa-flask"></i></div>
+                        <div>
+                            <div class="card-title">藥物濃度 Drug Levels</div>
+                            <div class="card-subtitle">輸入檢驗數據</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group-row">
+                        <div class="form-group">
+                            <label for="drpDosesGiven">給藥劑數</label>
+                            <select id="drpDosesGiven" onchange="updateDoseFields()">
+                                <option value="1">給予 1 劑 (Non-Steady State)</option>
+                                <option value="3" selected>3 劑以上 (Steady State 達穩態)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="txtRecentDoseMg">最近一次劑量 (mg)</label>
+                            <div class="input-with-units">
+                                <input type="number" id="txtRecentDoseMg" value="1000" min="250" max="4000" step="250">
+                                <div class="unit-toggle"><span class="unit-btn active">mg</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group-row">
+                        <div class="form-group" id="groupRecentDoseTau">
+                            <label for="drpRecentDoseTau">給藥頻率 (Tau)</label>
+                            <select id="drpRecentDoseTau">
+                                <option value="8">每 8 小時 (Q8h)</option>
+                                <option value="12" selected>每 12 小時 (Q12h)</option>
+                                <option value="18">每 18 小時 (Q18h)</option>
+                                <option value="24">每 24 小時 (Q24h)</option>
+                                <option value="36">每 36 小時 (Q36h)</option>
+                                <option value="48">每 48 小時 (Q48h)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="txtRecentDoseTinf">輸注時間 T<sub>inf</sub> (hr)</label>
+                            <div class="input-with-units">
+                                <input type="number" id="txtRecentDoseTinf" value="1.5" min="0.25" max="8" step="0.25">
+                                <div class="unit-toggle"><span class="unit-btn active">hours</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="txtRecentDoseTime">最近一次給藥開始時間</label>
+                        <input type="datetime-local" id="txtRecentDoseTime" onchange="validateTiming()">
+                    </div>
+
+                    <div class="form-group" style="margin-top: 1rem; font-weight: 700; font-size: 0.9rem; color: var(--text-primary);">
+                        <i class="fa-solid fa-vials"></i> 血液中藥物濃度數據
+                    </div>
+
+                    <!-- Level 1 -->
+                    <div class="form-group-row" style="background: rgba(15,23,42,0.02); border: 1px solid var(--border-color); padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 0.75rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="txtLevel1Time">第一劑抽血時間</label>
+                            <input type="datetime-local" id="txtLevel1Time" onchange="validateTiming()">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="txtLevel1Conc">第一劑濃度 (mcg/mL)</label>
+                            <div class="input-with-units">
+                                <input type="number" id="txtLevel1Conc" value="16.5" min="1" max="100" step="0.1">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- No second level checkbox -->
+                    <div class="form-group" style="margin-bottom: 0.5rem;">
+                        <label class="customCheck" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" id="chkNoSecondLevel" checked onchange="toggleLevel2Field()">
+                            <span style="font-weight: 500;">僅輸入單一濃度 (採取 Bayesian 估算)</span>
+                        </label>
+                    </div>
+
+                    <!-- Level 2 (hidden if No Second Level is checked) -->
+                    <div id="divLevel2Inputs" class="form-group-row" style="display: none; background: rgba(15,23,42,0.02); border: 1px solid var(--border-color); padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 0.75rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="txtLevel2Time">第二劑抽血時間</label>
+                            <input type="datetime-local" id="txtLevel2Time" onchange="validateTiming()">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="txtLevel2Conc">第二劑濃度 (mcg/mL)</label>
+                            <div class="input-with-units">
+                                <input type="number" id="txtLevel2Conc" value="32.0" min="1" max="100" step="0.1">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="divTimingFeedback" class="info-box" style="display: none;"></div>
+                </div>
+            </main>
+
+            <!-- RIGHT COLUMN: RESULTS, PLAN, CHART -->
+            <section class="results-column">
+                <!-- Current/Planned Dose Settings -->
+                <div class="panel">
+                    <div class="card-header">
+                        <div class="card-icon card-icon-dose"><i class="fa-solid fa-pills"></i></div>
+                        <div>
+                            <div class="card-title">目前劑量 Current Dose</div>
+                            <div class="card-subtitle">用於計算及分析</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group-row">
+                        <div class="form-group">
+                            <label for="txtDose">劑量 Dose <span class="required">*</span> (mg)</label>
+                            <div class="input-with-units">
+                                <input type="number" id="txtDose" placeholder="e.g. 1000" value="1000" min="250" max="3000" step="250">
+                                <div class="unit-toggle"><span class="unit-btn active">mg</span></div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="txtInfusionTime">輸注時間 T<sub>inf</sub> <span class="required">*</span> (hours)</label>
+                            <div class="input-with-units">
+                                <input type="number" id="txtInfusionTime" value="1.5" min="0.25" max="8" step="0.25">
+                                <div class="unit-toggle"><span class="unit-btn active">hours</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="drpDosingFrequency">給藥頻率 Dosing Interval <span class="required">*</span></label>
+                        <select id="drpDosingFrequency">
+                            <option value="8">Q8h (每 8 小時)</option>
+                            <option value="12" selected>Q12h (每 12 小時)</option>
+                            <option value="18">Q18h (每 18 小時)</option>
+                            <option value="24">Q24h (每 24 小時)</option>
+                            <option value="36">Q36h (每 36 小時)</option>
+                            <option value="48">Q48h (每 48 小時)</option>
+                            <option value="72">Q72h (每 72 小時)</option>
+                        </select>
+                    </div>
+
+                    <!-- Dosing speed recommendation warning box -->
+                    <div class="rate-info-box" id="divRateWarning">
+                        <i class="fa-solid fa-lightbulb"></i>
+                        <span id="txtRateWarning">輸注速率建議：&le; 10 mg/min (避免 Red Man Syndrome)</span>
+                    </div>
+
+                    <!-- Hidden advanced configuration dropdowns in right panel to keep layout clean -->
+                    <div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem; display: flex; gap: 1rem;">
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <label for="drpClearanceMethod" style="font-size: 0.75rem;">清除率估算模型</label>
+                            <select id="drpClearanceMethod" onchange="onClearanceMethodChange()" style="font-size: 0.8rem; padding: 0.45rem;">
+                                <option value="Bayesian">Bayesian Pop. Models</option>
+                                <option value="Bauer">Bauer Method</option>
+                                <option value="Matzke">Matzke Method</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <label for="drpVdMethod" style="font-size: 0.75rem;">分佈體積估算模型</label>
+                            <select id="drpVdMethod" onchange="onVdMethodChange()" style="font-size: 0.8rem; padding: 0.45rem;">
+                                <option value="Bayesian">Bayesian Pop. Models</option>
+                                <option value="Bauer">Bauer (0.7 L/kg)</option>
+                                <option value="Matzke">Matzke Method</option>
+                                <option value="RushingAmbrose">Rushing-Ambrose</option>
+                                <option value="Obese">Morbidly Obese</option>
+                                <option value="Other">User-specified</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="groupCustomVd" style="display: none; margin-top: 0.5rem;">
+                        <label for="txtCustomVd">自訂 Vd 比例</label>
+                        <div class="input-with-units">
+                            <input type="number" id="txtCustomVd" value="0.7" min="0.1" max="2.5" step="0.01">
+                            <div class="unit-toggle"><span class="unit-btn active">L/kg</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Giant Calculate Button -->
+                <button class="btn-calculate" id="cmdCalculate" onclick="calculate()"><i class="fa-solid fa-calculator"></i> 計算 Calculate</button>
+                <div class="hotkey-hint">也可按 <kbd>Ctrl</kbd> + <kbd>Enter</kbd></div>
+
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn btn-secondary" onclick="loadExample()" style="flex: 1;"><i class="fa-solid fa-database"></i> 載入範例 Example</button>
+                    <button class="btn btn-danger" onclick="resetAll()" style="flex: 1;"><i class="fa-solid fa-trash-can"></i> 重設 Reset</button>
+                    <button class="btn btn-secondary" onclick="openModal()"><i class="fa-solid fa-gears"></i> 設定 Settings</button>
+                </div>
+            </section>
+        </div>
+
+        <!-- RESULTS SECTION (Appears below inputs grid once calculated) -->
+        <div class="layout-grid" style="margin-top: 2rem;">
+            <!-- Estimated Pharmacokinetic Parameters Card -->
+            <div class="panel">
+                <div class="card-header">
+                    <div class="card-icon" style="background-color: #eff6ff; color: #2563eb;"><i class="fa-solid fa-chart-simple"></i></div>
+                    <div>
+                        <div class="card-title">估算藥動學參數 Estimated PK Parameters</div>
+                        <div class="card-subtitle">依病人生理指標計算</div>
+                    </div>
+                </div>
+                
+                <div class="params-summary">
+                    <div class="param-card">
+                        <span class="param-label">分佈體積 Volume of Dist. ($V_d$)</span>
+                        <span class="param-value" id="valVd">0.00 <span class="param-unit">L</span></span>
+                        <span class="param-label" id="valVdRatio" style="margin-top: 0.25rem; font-size: 0.7rem; text-transform: none;">0.00 L/kg</span>
+                    </div>
+                    <div class="param-card">
+                        <span class="param-label">清除率 Clearance ($CL_{vanco}$)</span>
+                        <span class="param-value" id="valCl">0.00 <span class="param-unit">L/hr</span></span>
+                        <span class="param-label" id="valCrCl" style="margin-top: 0.25rem; font-size: 0.7rem; text-transform: none;">CrCl: 0 mL/min</span>
+                    </div>
+                    <div class="param-card">
+                        <span class="param-label">排除常數 Rate Constant ($k_e$)</span>
+                        <span class="param-value" id="valKe">0.0000 <span class="param-unit">hr⁻¹</span></span>
+                    </div>
+                    <div class="param-card">
+                        <span class="param-label">半衰期 Half-life ($t_{1/2}$)</span>
+                        <span class="param-value" id="valThalf">0.0 <span class="param-unit">hours</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Steady-State Line Plot -->
+            <div class="panel" style="padding: 1.25rem;">
+                <div class="card-header" style="margin-bottom: 1rem; padding-bottom: 0.5rem;">
+                    <div class="card-icon" style="background-color: #eff6ff; color: #2563eb;"><i class="fa-solid fa-chart-line"></i></div>
+                    <div>
+                        <div class="card-title">穩定狀態濃度曲線 Steady-State Curve</div>
+                        <div class="card-subtitle">選定劑量之濃度的時效曲線</div>
+                    </div>
+                </div>
+                <div style="position: relative; width: 100%; height: 220px;">
+                    <canvas id="chartVanco"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dosing Recommendations Section -->
+        <div class="panel" style="margin-top: 2rem;">
+            <div class="card-header">
+                <div class="card-icon" style="background-color: #eff6ff; color: #2563eb;"><i class="fa-solid fa-list-check"></i></div>
+                <div>
+                    <div class="card-title">劑量調整與規劃 Dosing Recommendations Grid</div>
+                    <div class="card-subtitle">依據 AUC 目標 (400-600) 建議的給藥方案</div>
+                </div>
+            </div>
+
+            <!-- Preferred Regimen Summary Box -->
+            <div class="preferred-card" id="divPreferredCard" style="display: none;">
+                <div class="preferred-header">
+                    <span class="preferred-title"><i class="fa-solid fa-star"></i> 推薦給藥指引 Recommended Regimen</span>
+                    <span class="badge badge-success" id="badgeRecommendedStatus">最佳選擇 Optimal</span>
+                </div>
+                <div style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary); font-family: var(--font-heading);" id="valPreferredDoseString">
+                    1000 mg IV every 12 hours
+                </div>
+                <div id="valPreferredDoseLoading" style="font-size: 0.85rem; color: var(--warning); font-weight: 600; margin-top: 0.25rem; display: none;">
+                    + 建議負荷劑量 (Loading Dose): 2000 mg IV x1
+                </div>
+                <div class="preferred-details">
+                    <div class="preferred-item">
+                        <span class="preferred-item-label">預測高峰濃度 Peak</span>
+                        <span class="preferred-item-value" id="valPreferredPeak">0.0 mcg/mL</span>
+                    </div>
+                    <div class="preferred-item">
+                        <span class="preferred-item-label">預測谷值濃度 Trough</span>
+                        <span class="preferred-item-value" id="valPreferredTrough">0.0 mcg/mL</span>
+                    </div>
+                    <div class="preferred-item">
+                        <span class="preferred-item-label">預測 AUC<sub>24</sub> / MIC 比例</span>
+                        <span class="preferred-item-value" id="valPreferredAuc" style="color: var(--success);">0.0</span>
+                    </div>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.5rem;" id="valPreferredReason">
+                    此給藥頻率及劑量預測能安全穩定地使 AUC/MIC 比例維持於 400-600 目標區間，並保持安全之谷值濃度。
+                </p>
+            </div>
+
+            <!-- Dosing Options Grid Table -->
+            <div class="table-container">
+                <table id="tblDosingOptions">
+                    <thead>
+                        <tr>
+                            <th>給藥間隔 Interval</th>
+                            <th>劑量 Dose</th>
+                            <th>高峰濃度 Peak</th>
+                            <th>谷值濃度 Trough</th>
+                            <th>$AUC_{24}$</th>
+                            <th>$AUC/MIC$</th>
+                            <th>操作 Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Generated Dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Actions Row -->
+            <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+                <button class="btn btn-success" id="btnCopyNote" onclick="generateEMRNote()"><i class="fa-solid fa-copy"></i> 複製臨床病歷紀錄 Copy Note</button>
+                <button class="btn btn-secondary" onclick="window.print()"><i class="fa-solid fa-print"></i> 列印報告 Print Report</button>
+                
+                <!-- Loading Dose Switch in results card -->
+                <div style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;">
+                    <label class="customCheck" style="cursor: pointer;">
+                        <input type="checkbox" id="chkRecommendLoadDose" onchange="onRecommendLoadDoseToggle()">
+                        <span>顯示負荷劑量建議 Recommend Loading Dose</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>本計算器之藥動學清除係數與 ClinCalc.com 一致。參考文獻：Buelga 2005, Adane 2015, Roberts 2011, Masich 2020。</p>
+            <p>僅供學術與臨床參考。實際給藥請依據醫療機構規範及臨床專業判斷。</p>
+        </footer>
+    </div>
+</div>
+
+    <!-- ADVANCED CONFIG SETTINGS MODAL -->
+    <div class="modal-overlay" id="modalSettings">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-gears"></i> 計算器參數設定 Settings</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            
+            <div class="form-group">
+                <label for="drpDefaultInfRate">預設輸注速率 Preference</label>
+                <select id="drpDefaultInfRate">
+                    <option value="1000" selected>1000 mg/hour (標準)</option>
+                    <option value="750">750 mg/hour</option>
+                    <option value="500">500 mg/hour (慢速)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="drpTinfRounding">輸注時間四捨五入</label>
+                <select id="drpTinfRounding">
+                    <option value="0.5" selected>最接近的 30 分鐘 (0.5 小時)</option>
+                    <option value="0.25">最接近的 15 分鐘 (0.25 小時)</option>
+                    <option value="0">精確值 (不四捨五入)</option>
+                </select>
+            </div>
+
+            <div class="form-group-row">
+                <div class="form-group">
+                    <label for="txtOrganismMic">病原菌 MIC 值</label>
+                    <div class="input-with-units">
+                        <input type="number" id="txtOrganismMic" value="1.0" min="0.1" max="8.0" step="0.1">
+                        <div class="unit-toggle"><span class="unit-btn active">mcg/mL</span></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="txtTargetAucMin">目標 AUC/MIC 最小值</label>
+                    <div class="input-with-units">
+                        <input type="number" id="txtTargetAucMin" value="400" min="200" max="800" step="50">
+                        <div class="unit-toggle"><span class="unit-btn active">ratio</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group-row">
+                <div class="form-group">
+                    <label for="txtTargetAucMax">目標 AUC/MIC 最大值</label>
+                    <div class="input-with-units">
+                        <input type="number" id="txtTargetAucMax" value="600" min="300" max="1000" step="50">
+                        <div class="unit-toggle"><span class="unit-btn active">ratio</span></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="txtTargetTroughMin">目標谷值最低濃度</label>
+                    <div class="input-with-units">
+                        <input type="number" id="txtTargetTroughMin" value="10" min="5" max="25" step="1">
+                        <div class="unit-toggle"><span class="unit-btn active">mcg/mL</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="txtTargetTroughMax">目標谷值最高濃度</label>
+                <div class="input-with-units">
+                    <input type="number" id="txtTargetTroughMax" value="20" min="10" max="30" step="1">
+                    <div class="unit-toggle"><span class="unit-btn active">mcg/mL</span></div>
+                </div>
+            </div>
+
+            <div class="btn-group" style="margin-top: 1.5rem;">
+                <button class="btn btn-secondary" onclick="resetAdvancedSettings()" style="flex: 1;">回復預設</button>
+                <button class="btn btn-primary" onclick="saveAdvancedSettings()" style="flex: 1;">儲存並套用</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PRINT REPORT AREA CONTAINER -->
+    <div id="printArea">
+        <!-- Generated Dynamically for printing -->
+    </div>
+
+    <script src="calculator.js"></script>
+</body>
+</html>
