@@ -59,14 +59,32 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("txtLevel1Time").value = formatDateForInput(level1Time);
     document.getElementById("txtLevel2Time").value = formatDateForInput(level2Time);
     
+    const pad = (num) => String(num).padStart(2, '0');
+    document.getElementById("txtRegimenStartDate").value = `${doseTime.getFullYear()}-${pad(doseTime.getMonth() + 1)}-${pad(doseTime.getDate())}`;
+    
+    // Enforce 4-digit limit on years for all date/datetime inputs
+    const limitYear = (e) => {
+        const val = e.target.value;
+        if (!val) return;
+        const parts = val.split('-');
+        if (parts.length > 0 && parts[0].length > 4) {
+            parts[0] = parts[0].slice(0, 4);
+            e.target.value = parts.join('-');
+        }
+    };
+    document.querySelectorAll('input[type="date"], input[type="datetime-local"]').forEach(input => {
+        input.addEventListener("input", limitYear);
+        input.addEventListener("change", limitYear);
+    });
+    
     // Bind all inputs for live calculation and reactivity
     const inputIds = [
-        "txtAge", "txtWeight", "txtHeight", "txtCreatinine", 
+        "txtAge", "txtWeight", "txtHeight", "txtCreatinine", "txtScrDate",
         "txtCrCl", "txtCustomVd", "drpRenalReplacement", 
         "txtDose", "txtInfusionTime", "drpDosingFrequency",
-        "drpDosesGiven", "txtRecentDoseMg", "drpRecentDoseTau", 
-        "txtRecentDoseTinf", "txtRecentDoseTime", "txtLevel1Time", 
-        "txtLevel1Conc", "txtLevel2Time", "txtLevel2Conc"
+        "drpDosesGiven", "txtRecentDoseTime", "txtLevel1Time", 
+        "txtLevel1Conc", "txtLevel2Time", "txtLevel2Conc",
+        "txtRegimenStartDate"
     ];
     
     inputIds.forEach(id => {
@@ -99,6 +117,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // Bind result inputs for synchronization and reactivity
+    const resultInputIds = ["txtResultDose", "drpResultDosingFrequency", "txtResultInfusionTime"];
+    resultInputIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener("input", () => {
+                syncDosingInputs('result');
+                calculate();
+            });
+            el.addEventListener("change", () => {
+                syncDosingInputs('result');
+                calculate();
+            });
+        }
+    });
+
     // Initial calculation and warnings run
     updateInfusionWarning();
     calculate();
@@ -123,6 +157,11 @@ function setDosingMode(mode) {
     document.getElementById("btnModeAdjusted").classList.toggle("active", mode === 'Adjusted');
     
     document.getElementById("cardDrugLevels").style.display = (mode === 'Adjusted') ? "block" : "none";
+    
+    if (mode === 'Adjusted') {
+        // Initially sync top card to bottom card for starting baseline
+        syncDosingInputs('top');
+    }
     
     calculate();
 }
@@ -153,6 +192,7 @@ function onRecommendLoadDoseToggle() {
     calculate();
 }
 
+// Renal Replacement Therapy dialyses logic helper
 function toggleRenalReplacement() {
     const isDialysis = document.getElementById("drpRenalReplacement").value === 'RRT';
     document.getElementById("divDialysisWarning").style.display = isDialysis ? "block" : "none";
@@ -167,8 +207,6 @@ function toggleLevel2Field() {
 }
 
 function updateDoseFields() {
-    const doses = document.getElementById("drpDosesGiven").value;
-    document.getElementById("groupRecentDoseTau").style.display = (doses === '1') ? "none" : "flex";
     calculate();
 }
 
@@ -286,6 +324,9 @@ function updateInfusionWarning() {
 
 // Primary Dosing Engine calculations
 function calculate() {
+    if (!state.levelsAvailable) {
+        syncDosingInputs('top');
+    }
     if (!parseInputs()) return;
     
     const isDialysis = document.getElementById("drpRenalReplacement").value === 'RRT';
@@ -298,6 +339,23 @@ function calculate() {
         document.getElementById("valThalf").innerHTML = "N/A";
         document.getElementById("divPreferredCard").style.display = "none";
         document.getElementById("tblDosingOptions").querySelector("tbody").innerHTML = "<tr><td colspan='7' style='text-align: center;'>透析患者無推薦劑量網格 (No recommendations for dialysis)</td></tr>";
+        
+        // Clear current and manual dose results blocks
+        const idsToClear = ["valCurrentPeak", "valCurrentTrough", "valCurrentAuc", "valCurrentRate", "valManualPeak", "valManualTrough", "valManualAuc", "valManualRate"];
+        idsToClear.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                if (id.includes("Peak") || id.includes("Trough")) {
+                    el.innerHTML = `N/A <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span>`;
+                } else if (id.includes("Rate")) {
+                    el.innerHTML = `N/A <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mg/min</span>`;
+                } else {
+                    el.innerText = "N/A";
+                }
+                el.style.color = "var(--text-primary)";
+            }
+        });
+
         if (chartInstance) chartInstance.destroy();
         return;
     }
@@ -429,14 +487,97 @@ function calculate() {
     
     // 6. Generate options grid
     generateDosingGrid();
+
+    // 6.5. Calculate and display current dose results
+    const currentDose = parseFloat(document.getElementById("txtDose").value);
+    const currentTinf = parseFloat(document.getElementById("txtInfusionTime").value);
+    const currentTau = parseFloat(document.getElementById("drpDosingFrequency").value);
+    
+    if (!isNaN(currentDose) && !isNaN(currentTinf) && !isNaN(currentTau) && state.ke > 0) {
+        const cmaxCur = (currentDose * (1 - Math.exp(-state.ke * currentTinf))) / 
+                        (currentTinf * state.vd * state.ke * (1 - Math.exp(-state.ke * currentTau)));
+        const cminCur = cmaxCur * Math.exp(-state.ke * (currentTau - currentTinf));
+        const auc24Cur = (currentDose * (24 / currentTau)) / state.cl;
+        const aucMicCur = auc24Cur / state.organismMic;
+        
+        document.getElementById("valCurrentPeak").innerHTML = `${cmaxCur.toFixed(1)} <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span>`;
+        document.getElementById("valCurrentTrough").innerHTML = `${cminCur.toFixed(1)} <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span>`;
+        document.getElementById("valCurrentAuc").innerText = `${aucMicCur.toFixed(0)}`;
+        
+        const aucFieldCur = document.getElementById("valCurrentAuc");
+        if (aucMicCur >= state.targetAucMin && aucMicCur <= state.targetAucMax) {
+            aucFieldCur.style.color = "var(--success)";
+        } else {
+            aucFieldCur.style.color = "var(--danger)";
+        }
+        
+        const currentRate = currentDose / (currentTinf * 60);
+        const rateFieldCur = document.getElementById("valCurrentRate");
+        if (rateFieldCur) {
+            rateFieldCur.innerHTML = `${currentRate.toFixed(1)} <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mg/min</span>`;
+            if (currentRate <= 10.0) {
+                rateFieldCur.style.color = "var(--success)";
+            } else {
+                rateFieldCur.style.color = "var(--danger)";
+            }
+        }
+    } else {
+        document.getElementById("valCurrentPeak").innerHTML = `0.0 <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span>`;
+        document.getElementById("valCurrentTrough").innerHTML = `0.0 <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span>`;
+        document.getElementById("valCurrentAuc").innerText = `0`;
+        document.getElementById("valCurrentAuc").style.color = "var(--text-primary)";
+        if (document.getElementById("valCurrentRate")) {
+            document.getElementById("valCurrentRate").innerHTML = `0.0 <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mg/min</span>`;
+            document.getElementById("valCurrentRate").style.color = "var(--text-primary)";
+        }
+    }
+
+    // 7. Calculate and display manual schedule results
+    const manualDose = parseFloat(document.getElementById("txtResultDose").value);
+    const manualTinf = parseFloat(document.getElementById("txtResultInfusionTime").value);
+    const manualTau = parseFloat(document.getElementById("drpResultDosingFrequency").value);
+    
+    if (!isNaN(manualDose) && !isNaN(manualTinf) && !isNaN(manualTau) && state.ke > 0) {
+        const cmax = (manualDose * (1 - Math.exp(-state.ke * manualTinf))) / 
+                     (manualTinf * state.vd * state.ke * (1 - Math.exp(-state.ke * manualTau)));
+        const cmin = cmax * Math.exp(-state.ke * (manualTau - manualTinf));
+        const auc24 = (manualDose * (24 / manualTau)) / state.cl;
+        const aucMic = auc24 / state.organismMic;
+        
+        document.getElementById("valManualPeak").innerHTML = `${cmax.toFixed(1)} <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span>`;
+        document.getElementById("valManualTrough").innerHTML = `${cmin.toFixed(1)} <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span>`;
+        document.getElementById("valManualAuc").innerText = `${aucMic.toFixed(0)}`;
+        
+        const aucField = document.getElementById("valManualAuc");
+        if (aucMic >= state.targetAucMin && aucMic <= state.targetAucMax) {
+            aucField.style.color = "var(--success)";
+        } else {
+            aucField.style.color = "var(--danger)";
+        }
+        
+        // Output Manual Infusion Rate
+        const manualRate = manualDose / (manualTinf * 60);
+        const rateField = document.getElementById("valManualRate");
+        if (rateField) {
+            rateField.innerHTML = `${manualRate.toFixed(1)} <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mg/min</span>`;
+            if (manualRate <= 10.0) {
+                rateField.style.color = "var(--success)";
+            } else {
+                rateField.style.color = "var(--danger)";
+            }
+        }
+        
+        // Draw the curve for this manual dose
+        drawCurve(manualDose, manualTau, manualTinf);
+    }
 }
 
 // Handle Level adjustements
 function handleLevelAdjustments(priorCl, priorVd, clBuelga, vdBuelga) {
     const dosesGiven = document.getElementById("drpDosesGiven").value; // '1' or '3'
-    const recentDoseMg = parseFloat(document.getElementById("txtRecentDoseMg").value);
-    const recentDoseTau = parseFloat(document.getElementById("drpRecentDoseTau").value);
-    const recentDoseTinf = parseFloat(document.getElementById("txtRecentDoseTinf").value);
+    const recentDoseMg = parseFloat(document.getElementById("txtDose").value);
+    const recentDoseTau = parseFloat(document.getElementById("drpDosingFrequency").value);
+    const recentDoseTinf = parseFloat(document.getElementById("txtInfusionTime").value);
     
     const doseTimeStr = document.getElementById("txtRecentDoseTime").value;
     const level1TimeStr = document.getElementById("txtLevel1Time").value;
@@ -671,6 +812,8 @@ function showFeedbackSuccess(msg) {
 
 // Generate Dosing Options Table Grid
 function generateDosingGrid() {
+    const manualDose = parseFloat(document.getElementById("txtResultDose").value);
+    const manualTau = parseFloat(document.getElementById("drpResultDosingFrequency").value);
     const intervals = [8, 12, 18, 24, 36, 48, 72];
     const doses = [500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 3000];
     
@@ -758,8 +901,9 @@ function generateDosingGrid() {
     options.forEach(opt => {
         const tr = document.createElement("tr");
         
-        const isPreferred = (bestRegimen && opt.tau === bestRegimen.tau && opt.dose === bestRegimen.dose);
-        if (isPreferred) {
+        // Highlight active row matching the user's manual dose selection
+        const isActive = (opt.dose === manualDose && opt.tau === manualTau);
+        if (isActive) {
             tr.className = "preferred-row";
         }
         
@@ -771,11 +915,10 @@ function generateDosingGrid() {
             <td class="value-highlight">${opt.dose} mg</td>
             <td>${opt.peak.toFixed(1)}</td>
             <td class="value-highlight ${troughClass}">${opt.trough.toFixed(1)}</td>
-            <td>${opt.auc24.toFixed(0)}</td>
             <td class="value-highlight ${aucClass}">${opt.aucMic.toFixed(0)}</td>
             <td>
-                <button class="btn btn-secondary ${isPreferred ? 'btn-success' : ''}" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="selectRegimen(${opt.dose}, ${opt.tau}, ${opt.tinf})">
-                    ${isPreferred ? '<i class="fa-solid fa-circle-check"></i> Selected' : 'Select'}
+                <button class="btn btn-secondary ${isActive ? 'btn-success' : ''}" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="selectRegimen(${opt.dose}, ${opt.tau}, ${opt.tinf})">
+                    ${isActive ? '<i class="fa-solid fa-circle-check"></i> Selected' : 'Select'}
                 </button>
             </td>
         `;
@@ -800,9 +943,6 @@ function generateDosingGrid() {
         
         // Load settings to check loading dose checkbox
         updateLoadingDoseRecommendation();
-        
-        // Render Concentration Plot
-        drawCurve(bestRegimen.dose, bestRegimen.tau, bestRegimen.tinf);
     }
 }
 
@@ -823,44 +963,20 @@ function updateLoadingDoseRecommendation() {
 }
 
 function selectRegimen(dose, tau, tinf) {
-    // Redraw graph
-    drawCurve(dose, tau, tinf);
-    
-    // Update Dosing grid highlighting
-    const rows = document.getElementById("tblDosingOptions").querySelectorAll("tbody tr");
-    rows.forEach(row => {
-        const text = row.cells[0].innerText;
-        const doseText = row.cells[1].innerText;
-        if (text.includes(`Every ${tau} hr`) && doseText.includes(`${dose} mg`)) {
-            row.className = "preferred-row";
-            const btn = row.querySelector("button");
-            btn.className = "btn btn-secondary btn-success";
-            btn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Selected';
-        } else {
-            row.classList.remove("preferred-row");
-            const btn = row.querySelector("button");
-            btn.className = "btn btn-secondary";
-            btn.innerHTML = 'Select';
-        }
-    });
-    
-    // Update Preferred Regimen Card
-    const cmax = (dose * (1 - Math.exp(-state.ke * tinf))) / (tinf * state.vd * state.ke * (1 - Math.exp(-state.ke * tau)));
-    const cmin = cmax * Math.exp(-state.ke * (tau - tinf));
-    const auc24 = (dose * (24 / tau)) / state.cl;
-    const aucMic = auc24 / state.organismMic;
-    
-    document.getElementById("valPreferredDoseString").innerText = `${dose} mg IV Every ${tau} Hours (Q${tau}h, 輸注時間 ${tinf.toFixed(1)} 小時)`;
-    document.getElementById("valPreferredPeak").innerText = `${cmax.toFixed(1)} mcg/mL`;
-    document.getElementById("valPreferredTrough").innerText = `${cmin.toFixed(1)} mcg/mL`;
-    document.getElementById("valPreferredAuc").innerText = `${aucMic.toFixed(0)}`;
-    
-    const targetAucField = document.getElementById("valPreferredAuc");
-    if (aucMic >= state.targetAucMin && aucMic <= state.targetAucMax) {
-        targetAucField.style.color = "var(--success)";
+    if (state.levelsAvailable) {
+        // Level-Adjusted Mode: update only the bottom card
+        document.getElementById("txtResultDose").value = dose;
+        document.getElementById("txtResultInfusionTime").value = tinf;
+        document.getElementById("drpResultDosingFrequency").value = tau;
+        updateMgKgLabel();
     } else {
-        targetAucField.style.color = "var(--danger)";
+        // Empiric Mode: update top card and sync to bottom card
+        document.getElementById("txtDose").value = dose;
+        document.getElementById("txtInfusionTime").value = tinf;
+        document.getElementById("drpDosingFrequency").value = tau;
+        syncDosingInputs('top');
     }
+    calculate();
 }
 
 // Draw Curve using Chart.js
@@ -960,9 +1076,22 @@ function calculateIBW(heightCm, sex) {
 
 function calculateInfusionTime(doseMg, rateMgHr, roundingHr) {
     let t = doseMg / rateMgHr;
+    
+    // Safety check: ensure rate <= 10 mg/min (equivalent to 600 mg/hour)
+    const minSafeT = doseMg / 600;
+    if (t < minSafeT) {
+        t = minSafeT;
+    }
+    
     if (roundingHr > 0) {
         t = Math.round(t / roundingHr) * roundingHr;
     }
+    
+    // Make sure rounding didn't drop the time below the safety threshold
+    if (t < minSafeT) {
+        t = Math.ceil(minSafeT / roundingHr) * roundingHr;
+    }
+    
     return Math.max(0.25, t);
 }
 
@@ -1006,24 +1135,18 @@ function hoursL1ToToL2(val) {
     return isNaN(val) ? "0.0" : val.toFixed(1);
 }
 
-// Load Example Patient parameters
-function loadExample() {
-    resetAll();
-    
-    document.getElementById("txtWeight").value = "70";
-    document.getElementById("txtHeight").value = "170";
-    document.getElementById("txtAge").value = "55";
-    document.getElementById("txtCreatinine").value = "0.9";
-    
-    calculate();
-}
-
 // Reset calculator inputs
 function resetAll() {
     document.getElementById("txtAge").value = "55";
     document.getElementById("txtWeight").value = "70";
     document.getElementById("txtHeight").value = "170";
     document.getElementById("txtCreatinine").value = "0.9";
+    
+    const scrDate = document.getElementById("txtScrDate");
+    if (scrDate) scrDate.value = "";
+    
+    const startDateEl = document.getElementById("txtRegimenStartDate");
+    if (startDateEl) startDateEl.value = "";
     
     document.getElementById("drpRenalReplacement").value = "None";
     document.getElementById("drpClearanceMethod").value = "Bayesian";
@@ -1047,72 +1170,302 @@ function onRecommendLoadDoseToggle() {
     updateLoadingDoseRecommendation();
 }
 
+// Load Example Patient parameters
+function loadExample() {
+    resetAll();
+    
+    document.getElementById("txtWeight").value = "66";
+    document.getElementById("txtHeight").value = "168";
+    document.getElementById("txtAge").value = "72";
+    document.getElementById("txtCreatinine").value = "0.7";
+    document.getElementById("txtScrDate").value = "2026-05-20";
+    
+    // Set to Level-Adjusted mode
+    setDosingMode('Adjusted');
+    
+    // Set drug levels parameters
+    document.getElementById("drpDosesGiven").value = "3"; // steady state: yes
+    updateDoseFields();
+    
+    // Baseline dose (top card)
+    document.getElementById("txtDose").value = "1000";
+    document.getElementById("drpDosingFrequency").value = "8"; // Q8H
+    document.getElementById("txtInfusionTime").value = "1.5";
+    document.getElementById("txtRecentDoseTime").value = "2026-05-24T20:26";
+    
+    document.getElementById("txtLevel1Time").value = "2026-05-25T04:58";
+    document.getElementById("txtLevel1Conc").value = "9.8";
+    document.getElementById("chkNoSecondLevel").checked = true;
+    toggleLevel2Field();
+    
+    // Regimen history
+    document.getElementById("txtRegimenStartDate").value = "2026-05-22";
+    
+    // Suggestion planned dose (bottom card)
+    document.getElementById("txtResultDose").value = "1250";
+    document.getElementById("txtResultInfusionTime").value = "2";
+    document.getElementById("drpResultDosingFrequency").value = "8"; // Q8H
+    
+    // Indication
+    document.getElementById("txtIndication").value = "Suspected spinal surgical site infection";
+    
+    calculate();
+}
+
+// Helper: Calculate recheck days of week (2-3 days after draw time)
+function getRecheckDays(baseDateStr) {
+    const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    let baseDate = new Date();
+    if (baseDateStr) {
+        const parsed = new Date(baseDateStr);
+        if (!isNaN(parsed.getTime())) {
+            baseDate = parsed;
+        }
+    }
+    const day2 = new Date(baseDate.getTime() + 2 * 24 * 60 * 60 * 1000);
+    const day3 = new Date(baseDate.getTime() + 3 * 24 * 60 * 60 * 1000);
+    return `${daysOfWeek[day2.getDay()]} or ${daysOfWeek[day3.getDay()]}`;
+}
+
 // Generate Clinical Progress Note for Electronic Medical Record (EMR)
 function generateEMRNote() {
     const bmi = state.weightKg / ((state.heightCm / 100) ** 2);
-    const doseString = document.getElementById("valPreferredDoseString").innerText;
-    const peak = document.getElementById("valPreferredPeak").innerText;
-    const trough = document.getElementById("valPreferredTrough").innerText;
-    const auc24 = document.getElementById("valPreferredAuc").innerText;
     
-    const loadingDoseStr = state.loadingDose ? 
-        `\n• 負荷劑量 (Loading Dose): ${Math.round((27.5 * state.weightKg) / 250) * 250} mg IV x1` : "";
+    // Parse values
+    const age = state.age;
+    const sex = state.sex === 'Male' ? 'male' : 'female';
+    const weight = state.weightKg.toFixed(0);
+    const height = state.heightCm.toFixed(0);
+    const scrVal = state.scr ? state.scr.toFixed(2) : "N/A";
+    const crClVal = state.crCl.toFixed(1);
+    
+    const dose = document.getElementById("txtResultDose").value;
+    const tau = document.getElementById("drpResultDosingFrequency").value;
+    const tinf = document.getElementById("txtResultInfusionTime").value;
+    
+    const cmax = (dose * (1 - Math.exp(-state.ke * tinf))) / (tinf * state.vd * state.ke * (1 - Math.exp(-state.ke * tau)));
+    const cmin = cmax * Math.exp(-state.ke * (tau - tinf));
+    const auc24 = (dose * (24 / tau)) / state.cl;
+    const aucMic = auc24 / state.organismMic;
+    
+    // Sampling Time & Steady State
+    let samplingTimeStr = "N/A (Empiric Dosing)";
+    let steadyStateStr = "yes (assumed)";
+    let serumLevelStr = "N/A";
+    let recentDoseTimeStr = "N/A";
+    
+    function formatDateTime(dateStr) {
+        if (!dateStr) return "N/A";
+        const dt = new Date(dateStr);
+        if (isNaN(dt.getTime())) return "N/A";
+        const pad = (num) => String(num).padStart(2, '0');
+        return `${dt.getFullYear()}/${pad(dt.getMonth() + 1)}/${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    }
 
-    const labLevelsStr = state.levelsAvailable ? 
-        `\n• 輸入實測血中濃度:
-  - 第一點濃度 (Level 1): ${document.getElementById("txtLevel1Conc").value} mcg/mL
-  - 第二點濃度 (Level 2): ${document.getElementById("chkNoSecondLevel").checked ? 'N/A' : document.getElementById("txtLevel2Conc").value + ' mcg/mL'}` : "";
+    let scrDateMD = "";
+    let scrDateStr = "";
+    const scrDateInput = document.getElementById("txtScrDate").value;
+    if (scrDateInput) {
+        const scrDt = new Date(scrDateInput);
+        if (!isNaN(scrDt.getTime())) {
+            scrDateMD = `${scrDt.getMonth() + 1}/${scrDt.getDate()}`;
+            scrDateStr = `${scrDateMD} `;
+        }
+    }
+    if (!scrDateMD) {
+        if (state.levelsAvailable) {
+            const drawTime = document.getElementById("txtLevel1Time").value;
+            if (drawTime) {
+                const dt = new Date(drawTime);
+                scrDateMD = `${dt.getMonth() + 1}/${dt.getDate()}`;
+                scrDateStr = `${scrDateMD} `;
+            }
+        }
+    }
+    if (!scrDateMD) {
+        const now = new Date();
+        scrDateMD = `${now.getMonth() + 1}/${now.getDate()}`;
+        scrDateStr = `${scrDateMD} `;
+    }
 
-    const note = `================================================
-萬古黴素臨床劑量評估紀錄 (VANCOMYCIN DOSING NOTE)
-================================================
-基本生理指標：
-• 年齡/性別: ${state.age} 歲 ${state.sex === 'Male' ? '男性' : '女性'}
-• 體重: ${state.weightKg.toFixed(1)} kg | IBW: ${state.ibw.toFixed(1)} kg | AdjBW: ${state.adjbw.toFixed(1)} kg
-• 身高: ${state.heightCm.toFixed(1)} cm | BMI: ${bmi.toFixed(1)} kg/m²
-• 估算 CrCl: ${state.crCl.toFixed(0)} mL/min (Cockcroft-Gault)
+    if (state.levelsAvailable) {
+        const drawTime = document.getElementById("txtLevel1Time").value;
+        if (drawTime) {
+            samplingTimeStr = formatDateTime(drawTime);
+        }
+        
+        const isSteadyState = document.getElementById("drpDosesGiven").value === '3';
+        steadyStateStr = isSteadyState ? "yes" : "no";
+        
+        const l1Conc = parseFloat(document.getElementById("txtLevel1Conc").value);
+        
+        // Calculate recent dose AUC
+        const recentMg = parseFloat(document.getElementById("txtDose").value);
+        const recentTau = parseFloat(document.getElementById("drpDosingFrequency").value);
+        let recentAucMicVal = 0;
+        if (!isNaN(recentMg) && !isNaN(recentTau) && state.cl > 0) {
+            recentAucMicVal = (recentMg * (24 / recentTau)) / state.cl / state.organismMic;
+        } else {
+            recentAucMicVal = aucMic;
+        }
+        
+        serumLevelStr = `${l1Conc.toFixed(1)} mcg/mL (predicted AUC: ${recentAucMicVal.toFixed(0)} mcg*hr/mL)`;
+        
+        const recentDoseTime = document.getElementById("txtRecentDoseTime").value;
+        recentDoseTimeStr = formatDateTime(recentDoseTime);
+    }
+    
+    // Medication Regimen
+    let regimenStr = "";
+    if (state.levelsAvailable) {
+        const recentMg = parseFloat(document.getElementById("txtDose").value);
+        const recentTau = parseFloat(document.getElementById("drpDosingFrequency").value);
+        const regimenStartDateInput = document.getElementById("txtRegimenStartDate").value;
+        let regimenStartDateMD = "";
+        if (regimenStartDateInput) {
+            const startDt = new Date(regimenStartDateInput);
+            if (!isNaN(startDt.getTime())) {
+                regimenStartDateMD = `${startDt.getMonth() + 1}/${startDt.getDate()}`;
+            }
+        }
+        
+        if (regimenStartDateMD) {
+            regimenStr = `Vancomycin ${recentMg} mg IVD Q${recentTau}H (${regimenStartDateMD}~)`;
+        } else {
+            regimenStr = `Vancomycin ${recentMg} mg IVD Q${recentTau}H (~)`;
+        }
+    } else {
+        regimenStr = `Vancomycin ${dose} mg IVD Q${tau}H (Suggested)`;
+    }
+    
+    // Indication
+    const indicationInput = document.getElementById("txtIndication");
+    const indication = (indicationInput && indicationInput.value.trim() !== "") ? indicationInput.value : "Suspected spinal surgical site infection";
+    
+    // Dynamic verb for dose adjustment suggestion
+    let verb = "adjusted to";
+    if (state.levelsAvailable) {
+        const recentMg = parseFloat(document.getElementById("txtDose").value);
+        const recentTau = parseFloat(document.getElementById("drpDosingFrequency").value);
+        const newMg = parseFloat(dose);
+        const newTau = parseFloat(tau);
+        if (!isNaN(recentMg) && !isNaN(recentTau) && !isNaN(newMg) && !isNaN(newTau)) {
+            const oldDaily = (recentMg * 24) / recentTau;
+            const newDaily = (newMg * 24) / newTau;
+            if (newDaily > oldDaily) {
+                verb = "increased to";
+            } else if (newDaily < oldDaily) {
+                verb = "decreased to";
+            }
+        }
+    }
+    
+    const tinfFormatted = parseFloat(tinf) % 1 === 0 ? parseFloat(tinf).toFixed(0) : parseFloat(tinf).toFixed(1);
+    const tinfUnit = parseFloat(tinfFormatted) === 1 ? "hour" : "hours";
+    const drawTimeVal = state.levelsAvailable ? document.getElementById("txtLevel1Time").value : null;
+    const recheckDaysStr = getRecheckDays(drawTimeVal);
 
-藥動學估估參數：
-• 分佈體積 Vd: ${state.vd.toFixed(1)} L (${(state.vd / state.weightKg).toFixed(2)} L/kg)
-• 清除率 CL: ${state.cl.toFixed(2)} L/hr
-• Ke: ${state.ke.toFixed(4)} hr⁻¹ | 半衰期 Half-life: ${state.thalf.toFixed(1)} 小時 ${labLevelsStr}
+    // Determine target trough concentrations based on indication keywords
+    let targetTroughMin = 10;
+    let targetTroughMax = 15;
+    const lowerInd = indication.toLowerCase();
+    if (
+        lowerInd.includes("pneumonia") || lowerInd.includes("肺炎") ||
+        lowerInd.includes("bloodstream") || lowerInd.includes("bacteremia") || lowerInd.includes("血流") ||
+        lowerInd.includes("spinal") || lowerInd.includes("脊隨") || lowerInd.includes("脊髓") || lowerInd.includes("脊椎") ||
+        lowerInd.includes("endocarditis") || lowerInd.includes("心內膜") ||
+        lowerInd.includes("cns") ||
+        lowerInd.includes("osteoarthritis") || lowerInd.includes("osteomyelitis") || lowerInd.includes("骨關節") || lowerInd.includes("骨髓")
+    ) {
+        targetTroughMin = 15;
+        targetTroughMax = 20;
+    }
+    const targetTroughRange = `${targetTroughMin} to ${targetTroughMax}`;
 
-建議給藥指引及預估療效：${loadingDoseStr}
-• 維持劑量: ${doseString}
-• 預估穩態數值 (Predicted Steady-State):
-  - 高峰濃度 (Peak): ${peak}
-  - 谷值濃度 (Trough): ${trough}
-  - AUC24 / MIC 比例: ${auc24} (療效目標: ${state.targetAucMin}-${state.targetAucMax} / MIC = ${state.organismMic} mcg/mL)
+    // Determine if measured level is within target range
+    let isWithinRange = false;
+    if (state.levelsAvailable) {
+        const measuredTrough = parseFloat(document.getElementById("txtLevel1Conc").value);
+        if (!isNaN(measuredTrough)) {
+            isWithinRange = (measuredTrough >= targetTroughMin && measuredTrough <= targetTroughMax);
+        }
+    }
 
-臨床建議：
-• 建議於第 4 劑給藥前 30 分鐘抽血監測谷值濃度，以驗證是否達到穩態目標值。
-• 臨床給藥應配合臨床症狀調整，以防發生腎毒性。
-================================================`;
+    let planText = "";
+
+    if (state.levelsAvailable && isWithinRange) {
+        // Condition A: Level-adjusted and measured level is within target range
+        planText = `1. Target serum concentrations: ${targetTroughRange} mcg/mL; AUC: 400~600 mcg*hr/mL
+2. Maintain the current dose, but if acute kidney injury occurs, vancomycin trough level and serum creatinine should be checked immediately.
+3. Monitoring adverse effect (e.g., ototoxicity, renal toxicity).`;
+    } else if (state.levelsAvailable && !isWithinRange) {
+        // Condition B: Level-adjusted and measured level is outside target range -> Ask user how to adjust
+        const defaultAdj = `${verb} to ${dose} mg Q${tau}H IV infusion over ${tinfFormatted} ${tinfUnit}`;
+        const adjInput = prompt("1/3: 濃度落在目標區間外，請確認或修改給藥劑量調整建議 (Dose adjustment suggestion):", defaultAdj);
+        if (adjInput === null) return; // cancelled
+
+        const defaultHold = "No temporary discontinuation is required";
+        const holdInput = prompt("2/3: 濃度落在目標區間外，請輸入是否需要暫時停藥 (Is temporary discontinuation required?):", defaultHold);
+        if (holdInput === null) return;
+
+        const defaultRecheck = `before the morning dose on ${recheckDaysStr} (approximately 4:30 AM)`;
+        const recheckInput = prompt("3/3: 濃度落在目標區間外，請確認或修改下次抽血時間 (Next recheck schedule):", defaultRecheck);
+        if (recheckInput === null) return;
+
+        planText = `1. Target serum concentrations: ${targetTroughRange} mcg/mL; AUC: 400~600 mcg*hr/mL
+2. Dosage adjustment: the dosage may be ${adjInput}. (Temporary discontinuation: ${holdInput}).
+3. Recheck schedule: the trough level and serum creatinine should be rechecked ${recheckInput}.
+4. Monitoring adverse effect (e.g., ototoxicity, renal toxicity).`;
+    } else {
+        // Condition C: Empiric Dosing mode -> No prompts, just standard starting plan
+        planText = `1. Target serum concentrations: ${targetTroughRange} mcg/mL; AUC: 400~600 mcg*hr/mL
+2. If continued use is still required, the dosage may be adjusted to ${dose} mg Q${tau}H IV infusion over ${tinfFormatted} ${tinfUnit}. If there is no evidence of ongoing infection, discontinuation may also be considered.
+3. If the dosage is adjusted, the trough level and serum creatinine should be rechecked before the morning dose on ${recheckDaysStr} (approximately 4:30 AM).
+4. Monitoring adverse effect (e.g., ototoxicity, renal toxicity).`;
+    }
+
+    const note = `Medication: Vancomycin
+
+1. sampling time: ${samplingTimeStr}
+2. steady state: ${steadyStateStr}
+3. serum level (trough): ${serumLevelStr}
+4. acceptance: yes
+5. time to suggestion: appropriate
+
+Medication regimen:
+${regimenStr}
+
+Assessment:
+Age: ${age} y/o
+Sex: ${sex}
+Body weight: ${weight} kg
+Height: ${height} cm
+${scrDateStr}SCr: ${scrVal} mg/dL
+${scrDateStr}CrCl: ${crClVal} mL/min
+
+Indication: ${indication}
+Time most recent dose started: ${recentDoseTimeStr}
+
+Plan:
+
+${planText}`;
 
     navigator.clipboard.writeText(note).then(() => {
-        alert("萬古黴素臨床病歷紀錄已成功複製至剪貼簿！");
+        alert("萬古黴素臨床紀錄已成功複製至剪貼簿（依照要求格式）！");
     }).catch(err => {
         alert("複製失敗，請複製以下紀錄內容：\n\n" + note);
     });
 
     // Populate Print Area
     const printArea = document.getElementById("printArea");
+    const doseString = `${dose} mg IV Every ${tau} Hours (Q${tau}h, 輸注時間 ${parseFloat(tinf).toFixed(1)} 小時)`;
+    const peak = cmax.toFixed(1);
+    const trough = cmin.toFixed(1);
     printArea.innerHTML = `
         <h1>萬古黴素藥物劑量報告 (Vancomycin Dosing Report)</h1>
         <p><strong>報告產生時間 Date/Time:</strong> ${new Date().toLocaleString()}</p>
         <hr>
-        <h2>病患基本指標與腎功能 (Demographics & Renal Function)</h2>
         <table>
-            <tr><td><strong>年齡 / 性別</strong></td><td>${state.age} 歲 / ${state.sex === 'Male' ? '男性' : '女性'}</td></tr>
-            <tr><td><strong>體重 / 身高</strong></td><td>${(state.weightKg).toFixed(1)} kg / ${(state.heightCm).toFixed(1)} cm</td></tr>
-            <tr><td><strong>理想體重 / BMI</strong></td><td>${state.ibw.toFixed(1)} kg / ${bmi.toFixed(1)} kg/m²</td></tr>
-            <tr><td><strong>肌酸酐 / 估算 CrCl</strong></td><td>${state.scr ? state.scr.toFixed(2) + ' mg/dL' : '手動輸入'} / ${state.crCl.toFixed(0)} mL/min</td></tr>
-        </table>
-
-        <h2>估算藥動學參數 (Estimated PK Parameters)</h2>
-        <table>
-            <tr><td><strong>分佈體積 (Vd)</strong></td><td>${state.vd.toFixed(1)} L (${(state.vd / state.weightKg).toFixed(2)} L/kg)</td></tr>
-            <tr><td><strong>排除清除率 (CL)</strong></td><td>${state.cl.toFixed(2)} L/hr</td></tr>
             <tr><td><strong>排除速率常數 (Ke)</strong></td><td>${state.ke.toFixed(4)} hr⁻¹</td></tr>
             <tr><td><strong>藥物半衰期 (T1/2)</strong></td><td>${state.thalf.toFixed(1)} 小時</td></tr>
         </table>
@@ -1121,9 +1474,71 @@ function generateEMRNote() {
         <div style="background: #f8f9fa; border: 1.5px solid #d3d3d3; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
             <p style="font-size: 1.2rem; font-weight: bold; margin: 0;">${doseString}</p>
             ${state.loadingDose ? `<p style="font-weight: bold; color: #856404; margin-top: 0.25rem;">+ 負荷劑量 (Loading Dose): ${Math.round((27.5 * state.weightKg) / 250) * 250} mg IV x1</p>` : ''}
-            <p style="margin-top: 0.5rem; margin-bottom: 0;"><strong>預測穩定狀態值：</strong>高峰: ${peak} | 谷值: ${trough} | AUC24/MIC: ${auc24}</p>
+            <p style="margin-top: 0.5rem; margin-bottom: 0;"><strong>預測穩定狀態值：</strong>高峰: ${peak} | 谷值: ${trough} | AUC24/MIC: ${auc24.toFixed(0)}</p>
         </div>
         
         <p style="margin-top: 2rem; font-size: 0.85rem; color: #555; font-style: italic;">此報告計算公式與 ClinCalc.com Bayesian prior 一致。實際處方請依臨床狀況調整。</p>
     `;
+}
+
+// Synchronize inputs between top card and results card
+function syncDosingInputs(source) {
+    if (state.levelsAvailable) {
+        // Decoupled in Level-Adjusted mode!
+        // We do NOT sync bottom ('result') back to top.
+        // We only allow syncing top to bottom if explicitly called (like when switching mode).
+        if (source === 'top') {
+            const doseTop = document.getElementById("txtDose");
+            const tinfTop = document.getElementById("txtInfusionTime");
+            const freqTop = document.getElementById("drpDosingFrequency");
+
+            const doseResult = document.getElementById("txtResultDose");
+            const tinfResult = document.getElementById("txtResultInfusionTime");
+            const freqResult = document.getElementById("drpResultDosingFrequency");
+
+            if (doseTop && doseResult) {
+                doseResult.value = doseTop.value;
+                tinfResult.value = tinfTop.value;
+                freqResult.value = freqTop.value;
+            }
+        }
+        updateMgKgLabel();
+        return;
+    }
+
+    const doseTop = document.getElementById("txtDose");
+    const tinfTop = document.getElementById("txtInfusionTime");
+    const freqTop = document.getElementById("drpDosingFrequency");
+
+    const doseResult = document.getElementById("txtResultDose");
+    const tinfResult = document.getElementById("txtResultInfusionTime");
+    const freqResult = document.getElementById("drpResultDosingFrequency");
+
+    if (!doseTop || !doseResult) return;
+
+    if (source === 'top') {
+        doseResult.value = doseTop.value;
+        tinfResult.value = tinfTop.value;
+        freqResult.value = freqTop.value;
+    } else {
+        doseTop.value = doseResult.value;
+        tinfTop.value = tinfResult.value;
+        freqTop.value = freqResult.value;
+    }
+    
+    updateMgKgLabel();
+}
+
+function updateMgKgLabel() {
+    const weightVal = parseFloat(document.getElementById("txtWeight").value);
+    const doseVal = parseFloat(document.getElementById("txtDose").value);
+    const label = document.getElementById("lblResultDoseMgKg");
+    if (label) {
+        if (!isNaN(weightVal) && weightVal > 0 && !isNaN(doseVal)) {
+            const mgKg = doseVal / weightVal;
+            label.innerText = `(${mgKg.toFixed(1)} mg/kg)`;
+        } else {
+            label.innerText = "(0.0 mg/kg)";
+        }
+    }
 }

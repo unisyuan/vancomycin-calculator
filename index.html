@@ -113,6 +113,14 @@
                             </div>
                         </div>
 
+                        <!-- SCr Lab Date -->
+                        <div class="form-group" id="groupSCrDate" style="margin-top: 0.75rem;">
+                            <label for="txtScrDate">血清肌酸酐量測日期 SCr Lab Date</label>
+                            <div class="input-with-units">
+                                <input type="date" id="txtScrDate">
+                            </div>
+                        </div>
+
                         <!-- Manual CrCl Input (hidden by default) -->
                         <div class="form-group" id="groupManualCrCl" style="display: none;">
                             <label for="txtCrCl">
@@ -142,6 +150,14 @@
                         </select>
                     </div>
 
+                    <!-- Indication Input -->
+                    <div class="form-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        <label for="txtIndication">適應症 Indication</label>
+                        <div class="input-with-units">
+                            <input type="text" id="txtIndication" placeholder="e.g. Suspected spinal surgical site infection" value="Suspected spinal surgical site infection">
+                        </div>
+                    </div>
+
                     <div id="divDialysisWarning" class="danger-box" style="display: none; margin-top: 0.75rem; margin-bottom: 0;">
                         <i class="fa-solid fa-triangle-exclamation"></i> <strong>注意：</strong>本計算器非針對透析患者設計。透析患者藥物清除動力學高度不穩定，請參照專門指引進行估算。
                     </div>
@@ -157,47 +173,34 @@
                         </div>
                     </div>
 
-                    <div class="form-group-row">
-                        <div class="form-group">
-                            <label for="drpDosesGiven">給藥劑數</label>
-                            <select id="drpDosesGiven" onchange="updateDoseFields()">
-                                <option value="1">給予 1 劑 (Non-Steady State)</option>
-                                <option value="3" selected>3 劑以上 (Steady State 達穩態)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="txtRecentDoseMg">最近一次劑量 (mg)</label>
-                            <div class="input-with-units">
-                                <input type="number" id="txtRecentDoseMg" value="1000" min="250" max="4000" step="250">
-                                <div class="unit-toggle"><span class="unit-btn active">mg</span></div>
-                            </div>
-                        </div>
+                    <div class="form-group">
+                        <label for="drpDosesGiven">給藥劑數</label>
+                        <select id="drpDosesGiven" onchange="updateDoseFields()">
+                            <option value="1">給予 1 劑 (Non-Steady State)</option>
+                            <option value="3" selected>3 劑以上 (Steady State 達穩態)</option>
+                        </select>
                     </div>
 
-                    <div class="form-group-row">
-                        <div class="form-group" id="groupRecentDoseTau">
-                            <label for="drpRecentDoseTau">給藥頻率 (Tau)</label>
-                            <select id="drpRecentDoseTau">
-                                <option value="8">每 8 小時 (Q8h)</option>
-                                <option value="12" selected>每 12 小時 (Q12h)</option>
-                                <option value="18">每 18 小時 (Q18h)</option>
-                                <option value="24">每 24 小時 (Q24h)</option>
-                                <option value="36">每 36 小時 (Q36h)</option>
-                                <option value="48">每 48 小時 (Q48h)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="txtRecentDoseTinf">輸注時間 T<sub>inf</sub> (hr)</label>
-                            <div class="input-with-units">
-                                <input type="number" id="txtRecentDoseTinf" value="1.5" min="0.25" max="8" step="0.25">
-                                <div class="unit-toggle"><span class="unit-btn active">hours</span></div>
-                            </div>
-                        </div>
-                    </div>
+
 
                     <div class="form-group">
                         <label for="txtRecentDoseTime">最近一次給藥開始時間</label>
-                        <input type="datetime-local" id="txtRecentDoseTime" onchange="validateTiming()">
+                        <div class="input-with-units">
+                            <input type="datetime-local" id="txtRecentDoseTime" onchange="validateTiming()">
+                        </div>
+                    </div>
+
+                    <!-- EMR Regimen History (Bilingual) -->
+                    <div class="form-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        <label style="font-weight: 700; font-size: 0.9rem; color: var(--text-primary); margin-bottom: 0.5rem; display: block;">
+                            <i class="fa-solid fa-clock-history"></i> 病歷紀錄用給藥歷史 EMR Regimen History
+                        </label>
+                        <div class="form-group">
+                            <label for="txtRegimenStartDate" style="font-size: 0.75rem;">此次處方起始日期 Current Regimen Start Date</label>
+                            <div class="input-with-units">
+                                <input type="date" id="txtRegimenStartDate">
+                            </div>
+                        </div>
                     </div>
 
                     <div class="form-group" style="margin-top: 1rem; font-weight: 700; font-size: 0.9rem; color: var(--text-primary);">
@@ -208,7 +211,9 @@
                     <div class="form-group-row" style="background: rgba(15,23,42,0.02); border: 1px solid var(--border-color); padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 0.75rem;">
                         <div class="form-group" style="margin-bottom: 0;">
                             <label for="txtLevel1Time">第一劑抽血時間</label>
-                            <input type="datetime-local" id="txtLevel1Time" onchange="validateTiming()">
+                            <div class="input-with-units">
+                                <input type="datetime-local" id="txtLevel1Time" onchange="validateTiming()">
+                            </div>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
                             <label for="txtLevel1Conc">第一劑濃度 (mcg/mL)</label>
@@ -230,7 +235,9 @@
                     <div id="divLevel2Inputs" class="form-group-row" style="display: none; background: rgba(15,23,42,0.02); border: 1px solid var(--border-color); padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 0.75rem;">
                         <div class="form-group" style="margin-bottom: 0;">
                             <label for="txtLevel2Time">第二劑抽血時間</label>
-                            <input type="datetime-local" id="txtLevel2Time" onchange="validateTiming()">
+                            <div class="input-with-units">
+                                <input type="datetime-local" id="txtLevel2Time" onchange="validateTiming()">
+                            </div>
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
                             <label for="txtLevel2Conc">第二劑濃度 (mcg/mL)</label>
@@ -267,7 +274,7 @@
                         <div class="form-group">
                             <label for="txtInfusionTime">輸注時間 T<sub>inf</sub> <span class="required">*</span> (hours)</label>
                             <div class="input-with-units">
-                                <input type="number" id="txtInfusionTime" value="1.5" min="0.25" max="8" step="0.25">
+                                <input type="number" id="txtInfusionTime" value="1.5" min="0.25" max="8" step="any">
                                 <div class="unit-toggle"><span class="unit-btn active">hours</span></div>
                             </div>
                         </div>
@@ -290,6 +297,26 @@
                     <div class="rate-info-box" id="divRateWarning">
                         <i class="fa-solid fa-lightbulb"></i>
                         <span id="txtRateWarning">輸注速率建議：&le; 10 mg/min (避免 Red Man Syndrome)</span>
+                    </div>
+
+                    <!-- Real-time Current Dose Calculation Results -->
+                    <div class="manual-results-details" id="divCurrentDoseResults" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; background: rgba(37,99,235,0.04); padding: 0.65rem; border-radius: 0.5rem; border: 1px dashed var(--border-color); margin-top: 0.75rem; text-align: center;">
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">預測高峰 PEAK</span>
+                            <span id="valCurrentPeak" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">0.0 <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span></span>
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">預測谷值 TROUGH</span>
+                            <span id="valCurrentTrough" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">0.0 <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span></span>
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">預測 AUC/MIC</span>
+                            <span id="valCurrentAuc" style="font-size: 0.95rem; font-weight: 700; color: var(--success);">0.0</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">輸注速率 RATE</span>
+                            <span id="valCurrentRate" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">0.0 <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mg/min</span></span>
+                        </div>
                     </div>
 
                     <!-- Hidden advanced configuration dropdowns in right panel to keep layout clean -->
@@ -327,11 +354,6 @@
                 <!-- Giant Calculate Button -->
                 <button class="btn-calculate" id="cmdCalculate" onclick="calculate()"><i class="fa-solid fa-calculator"></i> 計算 Calculate</button>
                 <div class="hotkey-hint">也可按 <kbd>Ctrl</kbd> + <kbd>Enter</kbd></div>
-
-                <div class="btn-group" style="margin-top: 1rem;">
-                    <button class="btn btn-secondary" onclick="loadExample()" style="flex: 1;"><i class="fa-solid fa-database"></i> 載入範例 Example</button>
-                    <button class="btn btn-danger" onclick="resetAll()" style="flex: 1;"><i class="fa-solid fa-trash-can"></i> 重設 Reset</button>
-                    <button class="btn btn-secondary" onclick="openModal()"><i class="fa-solid fa-gears"></i> 設定 Settings</button>
                 </div>
             </section>
         </div>
@@ -350,21 +372,21 @@
                 
                 <div class="params-summary">
                     <div class="param-card">
-                        <span class="param-label">分佈體積 Volume of Dist. ($V_d$)</span>
+                        <span class="param-label">分佈體積 Volume of Dist. (Vd)</span>
                         <span class="param-value" id="valVd">0.00 <span class="param-unit">L</span></span>
                         <span class="param-label" id="valVdRatio" style="margin-top: 0.25rem; font-size: 0.7rem; text-transform: none;">0.00 L/kg</span>
                     </div>
                     <div class="param-card">
-                        <span class="param-label">清除率 Clearance ($CL_{vanco}$)</span>
+                        <span class="param-label">清除率 Clearance (CL)</span>
                         <span class="param-value" id="valCl">0.00 <span class="param-unit">L/hr</span></span>
                         <span class="param-label" id="valCrCl" style="margin-top: 0.25rem; font-size: 0.7rem; text-transform: none;">CrCl: 0 mL/min</span>
                     </div>
                     <div class="param-card">
-                        <span class="param-label">排除常數 Rate Constant ($k_e$)</span>
+                        <span class="param-label">排除常數 Rate Constant (Ke)</span>
                         <span class="param-value" id="valKe">0.0000 <span class="param-unit">hr⁻¹</span></span>
                     </div>
                     <div class="param-card">
-                        <span class="param-label">半衰期 Half-life ($t_{1/2}$)</span>
+                        <span class="param-label">半衰期 Half-life (t1/2)</span>
                         <span class="param-value" id="valThalf">0.0 <span class="param-unit">hours</span></span>
                     </div>
                 </div>
@@ -395,35 +417,105 @@
                 </div>
             </div>
 
-            <!-- Preferred Regimen Summary Box -->
-            <div class="preferred-card" id="divPreferredCard" style="display: none;">
-                <div class="preferred-header">
-                    <span class="preferred-title"><i class="fa-solid fa-star"></i> 推薦給藥指引 Recommended Regimen</span>
-                    <span class="badge badge-success" id="badgeRecommendedStatus">最佳選擇 Optimal</span>
-                </div>
-                <div style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary); font-family: var(--font-heading);" id="valPreferredDoseString">
-                    1000 mg IV every 12 hours
-                </div>
-                <div id="valPreferredDoseLoading" style="font-size: 0.85rem; color: var(--warning); font-weight: 600; margin-top: 0.25rem; display: none;">
-                    + 建議負荷劑量 (Loading Dose): 2000 mg IV x1
-                </div>
-                <div class="preferred-details">
-                    <div class="preferred-item">
-                        <span class="preferred-item-label">預測高峰濃度 Peak</span>
-                        <span class="preferred-item-value" id="valPreferredPeak">0.0 mcg/mL</span>
+            <!-- Dosing Cards Row (Recommended vs Manual) -->
+            <div class="dosing-cards-grid">
+                <!-- Preferred Regimen Summary Box -->
+                <div class="preferred-card" id="divPreferredCard" style="display: none; margin-bottom: 0;">
+                    <div class="preferred-header">
+                        <span class="preferred-title"><i class="fa-solid fa-star"></i> 推薦給藥指引 Recommended Regimen</span>
+                        <span class="badge badge-success" id="badgeRecommendedStatus">最佳選擇 Optimal</span>
                     </div>
-                    <div class="preferred-item">
-                        <span class="preferred-item-label">預測谷值濃度 Trough</span>
-                        <span class="preferred-item-value" id="valPreferredTrough">0.0 mcg/mL</span>
+                    <div style="font-size: 1.35rem; font-weight: 800; color: var(--text-primary); font-family: var(--font-heading);" id="valPreferredDoseString">
+                        1000 mg IV every 12 hours
                     </div>
-                    <div class="preferred-item">
-                        <span class="preferred-item-label">預測 AUC<sub>24</sub> / MIC 比例</span>
-                        <span class="preferred-item-value" id="valPreferredAuc" style="color: var(--success);">0.0</span>
+                    <div id="valPreferredDoseLoading" style="font-size: 0.85rem; color: var(--warning); font-weight: 600; margin-top: 0.25rem; display: none;">
+                        + 建議負荷劑量 (Loading Dose): 2000 mg IV x1
+                    </div>
+                    <div class="preferred-details">
+                        <div class="preferred-item">
+                            <span class="preferred-item-label">預測高峰濃度 Peak</span>
+                            <span class="preferred-item-value" id="valPreferredPeak">0.0 mcg/mL</span>
+                        </div>
+                        <div class="preferred-item">
+                            <span class="preferred-item-label">預測谷值濃度 Trough</span>
+                            <span class="preferred-item-value" id="valPreferredTrough">0.0 mcg/mL</span>
+                        </div>
+                        <div class="preferred-item">
+                            <span class="preferred-item-label">預測 AUC<sub>24</sub> / MIC 比例</span>
+                            <span class="preferred-item-value" id="valPreferredAuc" style="color: var(--success);">0.0</span>
+                        </div>
+                    </div>
+                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.75rem; border-top: 1px solid var(--border-color); padding-top: 0.5rem;" id="valPreferredReason">
+                        此給藥頻率及劑量預測能安全穩定地使 AUC/MIC 比例維持於 400-600 目標區間，並保持安全之谷值濃度。
+                    </p>
+                </div>
+
+                <!-- Dosing Schedule (Manual Override) -->
+                <div class="panel dosing-schedule-card" style="margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div class="card-header" style="margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color);">
+                        <div class="card-icon" style="background-color: #eff6ff; color: #2563eb; width: 2.2rem; height: 2.2rem; border-radius: 0.5rem; font-size: 1rem;"><i class="fa-solid fa-sliders"></i></div>
+                        <div>
+                            <div class="card-title" style="font-size: 1.05rem;">調整給藥方案 Dosing Schedule</div>
+                            <div class="card-subtitle" style="font-size: 0.7rem;">手動微調劑量、頻率與輸注時間</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group-row" style="margin-bottom: 0.5rem; gap: 0.75rem;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="display: flex; align-items: baseline; gap: 0.35rem; font-size: 0.8rem; font-weight: 600;">
+                                <span>劑量 Dose</span>
+                                <span id="lblResultDoseMgKg" style="font-size: 0.7rem; color: var(--text-muted); font-weight: normal;">(0.0 mg/kg)</span>
+                            </label>
+                            <div class="input-with-units" style="background: rgba(15,23,42,0.02); height: 36px;">
+                                <input type="number" id="txtResultDose" value="1000" min="250" max="3000" step="250" style="padding: 0.45rem 0.65rem; font-size: 0.9rem;">
+                                <div class="unit-toggle" style="padding: 1px;"><span class="unit-btn active" style="font-size: 0.7rem; padding: 0 0.5rem;">mg</span></div>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="font-size: 0.8rem; font-weight: 600;">頻次 Frequency</label>
+                            <select id="drpResultDosingFrequency" style="height: 36px; padding: 0.45rem 0.65rem; font-size: 0.9rem; background: rgba(15,23,42,0.02);">
+                                <option value="8">8 hrs (Q8h)</option>
+                                <option value="12">12 hrs (Q12h)</option>
+                                <option value="18">18 hrs (Q18h)</option>
+                                <option value="24">24 hrs (Q24h)</option>
+                                <option value="36">36 hrs (Q36h)</option>
+                                <option value="48">48 hrs (Q48h)</option>
+                                <option value="72">72 hrs (Q72h)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group-row" style="margin-bottom: 0.5rem; gap: 0.75rem; align-items: flex-end;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label style="font-size: 0.8rem; font-weight: 600;">輸注時間 Infusion Time</label>
+                            <div class="input-with-units" style="background: rgba(15,23,42,0.02); height: 36px;">
+                                <input type="number" id="txtResultInfusionTime" value="1.5" min="0.25" max="8" step="any" style="padding: 0.45rem 0.65rem; font-size: 0.9rem;">
+                                <div class="unit-toggle" style="padding: 1px;"><span class="unit-btn active" style="font-size: 0.7rem; padding: 0 0.5rem;">hr(s)</span></div>
+                            </div>
+                        </div>
+                        <div style="flex: 1;"></div>
+                    </div>
+
+                    <!-- Real-time Manual Recalculation Results -->
+                    <div class="manual-results-details" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; background: rgba(37,99,235,0.04); padding: 0.65rem; border-radius: 0.5rem; border: 1px dashed var(--border-color); margin-top: 0.75rem; text-align: center;">
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">預測高峰 Peak</span>
+                            <span id="valManualPeak" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">0.0 <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span></span>
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">預測谷值 Trough</span>
+                            <span id="valManualTrough" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">0.0 <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mcg/mL</span></span>
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">預測 AUC/MIC</span>
+                            <span id="valManualAuc" style="font-size: 0.95rem; font-weight: 700; color: var(--success);">0.0</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">輸注速率 Rate</span>
+                            <span id="valManualRate" style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">0.0 <span style="font-size: 0.65rem; font-weight: normal; color: var(--text-muted);">mg/min</span></span>
+                        </div>
                     </div>
                 </div>
-                <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.5rem;" id="valPreferredReason">
-                    此給藥頻率及劑量預測能安全穩定地使 AUC/MIC 比例維持於 400-600 目標區間，並保持安全之谷值濃度。
-                </p>
             </div>
 
             <!-- Dosing Options Grid Table -->
@@ -435,8 +527,7 @@
                             <th>劑量 Dose</th>
                             <th>高峰濃度 Peak</th>
                             <th>谷值濃度 Trough</th>
-                            <th>$AUC_{24}$</th>
-                            <th>$AUC/MIC$</th>
+                            <th>AUC/MIC</th>
                             <th>操作 Action</th>
                         </tr>
                     </thead>

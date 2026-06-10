@@ -307,6 +307,7 @@ body.dark-theme .input-with-units {
 input[type="text"],
 input[type="number"],
 input[type="datetime-local"],
+input[type="date"],
 select {
     width: 100%;
     background: transparent;
@@ -1040,4 +1041,26 @@ body.dark-theme .theme-toggle-btn {
     border-color: var(--primary);
     color: var(--primary);
     box-shadow: 0 6px 16px var(--primary-glow);
+}
+
+/* Dosing Cards Grid Layout */
+.dosing-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.dosing-schedule-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 1rem;
+    padding: 1.25rem 1.5rem !important;
+}
+
+@media (max-width: 768px) {
+    .dosing-cards-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
 }
